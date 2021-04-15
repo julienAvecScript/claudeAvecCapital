@@ -100,7 +100,7 @@ public class PositionCard {
                 if (spotPrice > dip) break;
                 this.status = 2;
                 this.dip = spotPrice;
-            case 2:;
+            case 2:
                 if (spotPrice < this.dip) {
                     this.dip = spotPrice;
                 }
