@@ -13,7 +13,7 @@ Buys low, sells high and holds your shit together
 4. Restart Claude
 5. Load Profile > Use Profile Key to go in LIVE mode
 
-# CURRENT BOUNTY
+# BOUNTY
 I will pay 20 USD in Bitcoin Cash to the first contributor that makes the Order POST signatures work.
 
 # REFACTORING
