@@ -8,9 +8,8 @@ module com.github.therealjlb.claude {
     requires com.fasterxml.jackson.annotation;
     requires com.fasterxml.jackson.core;
     requires com.fasterxml.jackson.databind;
-    requires invoker.coinbasepro.api;
-    requires invoker.commons;
-    requires invoker.security;
+    requires spring.core;
+    requires spring.web;
 
     // Tells the Java compiler that you module needs this module from the JDK
     requires java.net.http;

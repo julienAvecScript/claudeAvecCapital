@@ -1,20 +1,22 @@
 package com.github.therealjlb.claude;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.Pane;
-import javafx.scene.paint.Color;
 import javafx.scene.paint.Paint;
 
 import java.text.DecimalFormat;
 import java.util.HashMap;
+import java.util.UUID;
 
 public class PositionCard {
 
     public PositionCard(Dashboard dash, Position position) {
         this.dash = dash;
+        this.client = dash.getClient();
         this.position = position;
         this.change = false;
         this.canvas = new Canvas(Dashboard.POSITION_WIDTH, Dashboard.POSITION_HEIGHT);
@@ -108,30 +110,24 @@ public class PositionCard {
                 this.statusGoals[this.status] = buy;
                 if (spotPrice < buy) break;
                 if (spotPrice < open) break;
-                //SEND STOP BUY TO COINBASE
-                //if SUCCESSFUL this.position.setBuyOrderID(orderUUID);
+                double qty = this.position.getSize()/buy;
+                JsonNode buyOrder = this.client.postStopBuy(String.valueOf(buy), String.valueOf(qty));
+                if (buyOrder == null) break;
+                String buyOrderID = buyOrder.get("id").asText();
+                System.out.println(buyOrderID);
+                this.position.setBuyOrderID(UUID.fromString(buyOrderID));
                 this.position.setBuyPrice(buy);
+                this.position.setSizeBTC(qty);
+                System.out.println("ID: " + this.position.getBuyOrderID() + ": " + qty + " FOR " + buy);
                 this.status = 3;
             case 3:
                 buy = this.position.getBuyPrice();
                 this.statusGoals[this.status] = buy;
-                boolean filled = true;
-                //CHECK ORDER ID STATUS
-                //if FILLED this.position.setSizeBTC(orderBTC)
-                if (filled) {
-                    double size = this.position.getSize();
-                    this.position.setSizeBTC(size/buy);
-                    this.status = 4;
-                } else {
-                    if (spotPrice > buy - (buy * this.position.getMomReversalLimit())) break;
-                    //CANCEL EXISTING STOP BUY
-                    if (this.position.getBuyOrderID() != null) {
-                        //REQUEST CANCEL ORDER TO COINBASE
-                        //if SUCCESSFUL this.position.setBuyOrderID(null);
-                    }
-                    this.status = 2;
-                    break;
-                }
+                JsonNode fillBuyOrder = this.client.getOrder(this.position.getBuyOrderID().toString());
+                double fillQty = Double.parseDouble(fillBuyOrder.get("filled_size").asText());
+                boolean filled = (fillQty == this.position.getSizeBTC());
+                if (filled) this.status = 4;
+                else break;
             case 4:
                 this.position.setTurn(2);
                 buy = this.position.getBuyPrice();
@@ -139,9 +135,13 @@ public class PositionCard {
                 sell = peak-(peak*this.position.getExitLimit());
                 this.statusGoals[this.status] = peak;
                 if (spotPrice < peak) break;
-                //SEND STOP SELL TO COINBASE
-                //if SUCCESSFUL this.position.setSellOrderID(orderUUID);
+                JsonNode sellOrder = this.client.postStopSell(String.valueOf(sell), String.valueOf(this.position.getSizeBTC()));
+                if (sellOrder == null) break;
+                String sellOrderID = sellOrder.get("id").asText();
+                System.out.println(sellOrderID);
+                this.position.setSellOrderID(UUID.fromString(sellOrderID));
                 this.position.setExitPoint(sell);
+                System.out.println("ID: " + this.position.getBuyOrderID() + ": " + this.position.getSizeBTC() + " FOR " + sell);
                 this.status = 5;
             case 5:
                 this.position.setTurn(3);
@@ -239,6 +239,7 @@ public class PositionCard {
     }
 
     private Dashboard dash;
+    private CoinbaseClient client;
     private TextArea storyArea;
     private Position position;
     private Canvas canvas;
