@@ -80,6 +80,7 @@ public class PositionCard {
         if (this.position.isChoke()) return null;
         if (this.position.getStatus() > 5) return null;
         this.change = false;
+        boolean sims = this.position.isSims();
         int prevStatus = this.status;
         double prevExit = this.position.getExitPoint();
         String chapter = this.presentation;
@@ -111,22 +112,28 @@ public class PositionCard {
                 if (spotPrice < buy) break;
                 if (spotPrice < open) break;
                 double qty = this.position.getSize()/buy;
-                JsonNode buyOrder = this.client.postStopBuy(String.valueOf(buy), String.valueOf(qty));
-                if (buyOrder == null) break;
-                String buyOrderID = buyOrder.get("id").asText();
-                System.out.println(buyOrderID);
-                this.position.setBuyOrderID(UUID.fromString(buyOrderID));
+                if (!sims) {
+                    JsonNode buyOrder = this.client.postStopBuy(String.valueOf(buy), String.valueOf(qty));
+                    if (buyOrder == null) break;
+                    String buyOrderID = buyOrder.get("id").asText();
+                    System.out.println("ID: " + buyOrderID + ": " + qty + " FOR " + buy);
+                    this.position.setBuyOrderID(UUID.fromString(buyOrderID));
+                }
                 this.position.setBuyPrice(buy);
                 this.position.setSizeBTC(qty);
-                System.out.println("ID: " + this.position.getBuyOrderID() + ": " + qty + " FOR " + buy);
                 this.status = 3;
             case 3:
                 buy = this.position.getBuyPrice();
                 this.statusGoals[this.status] = buy;
-                JsonNode fillBuyOrder = this.client.getOrder(this.position.getBuyOrderID().toString());
-                double fillQty = Double.parseDouble(fillBuyOrder.get("filled_size").asText());
-                boolean filled = (fillQty == this.position.getSizeBTC());
-                if (filled) this.status = 4;
+                boolean buyFilled;
+                if (sims) {
+                    buyFilled = true;
+                } else {
+                    JsonNode fillBuyOrder = this.client.getOrder(this.position.getBuyOrderID().toString());
+                    double fillBuy = Double.parseDouble(fillBuyOrder.get("filled_size").asText());
+                    buyFilled = (fillBuy == this.position.getSizeBTC());
+                }
+                if (buyFilled) this.status = 4;
                 else break;
             case 4:
                 this.position.setTurn(2);
@@ -135,41 +142,45 @@ public class PositionCard {
                 sell = peak-(peak*this.position.getExitLimit());
                 this.statusGoals[this.status] = peak;
                 if (spotPrice < peak) break;
-                JsonNode sellOrder = this.client.postStopSell(String.valueOf(sell), String.valueOf(this.position.getSizeBTC()));
-                if (sellOrder == null) break;
-                String sellOrderID = sellOrder.get("id").asText();
-                System.out.println(sellOrderID);
-                this.position.setSellOrderID(UUID.fromString(sellOrderID));
-                this.position.setExitPoint(sell);
-                System.out.println("ID: " + this.position.getBuyOrderID() + ": " + this.position.getSizeBTC() + " FOR " + sell);
+                if (!sims) {
+                    JsonNode sellOrder = this.client.postStopSell(String.valueOf(sell), String.valueOf(this.position.getSizeBTC()));
+                    if (sellOrder == null) break;
+                    String sellOrderID = sellOrder.get("id").asText();
+                    System.out.println(sellOrderID);
+                    this.position.setSellOrderID(UUID.fromString(sellOrderID));
+                    System.out.println("ID: " + this.position.getBuyOrderID() + ": " + this.position.getSizeBTC() + " FOR " + sell);
+                }
                 this.status = 5;
             case 5:
                 this.position.setTurn(3);
                 sell = this.position.getExitPoint();
                 this.statusGoals[this.status] = sell;
                 nextSell = sell+(sell*this.position.getPeakLimit());
-                //CHECK ORDER ID STATUS
-                //if FILLED this.position.setClosePoint(orderSalePrice);
-                if (spotPrice > sell) {
-                    if (spotPrice < nextSell) break;
-                    //CANCEL EXISTING STOP SELL
-                    if (this.position.getSellOrderID() != null) {
-                        //REQUEST CANCEL ORDER TO COINBASE
-                        //if SUCCESSFUL this.position.setSellOrderID(null);
-                    }
-                    //SEND STOP SELL TO COINBASE
-                    //if SUCCESSFUL this.position.setSellOrderID(orderUUID);
-                    this.position.setExitPoint(sell+(sell*this.position.getExitLimit()));
-                    this.statusGoals[this.status] = this.position.getExitLimit();
-                    break;
-                } else {
-                    double size = this.position.getSizeBTC();
-                    this.position.setSize(size*sell);
+                JsonNode fillSellOrder = this.client.getOrder(this.position.getBuyOrderID().toString());
+                double fillSell = Double.parseDouble(fillSellOrder.get("filled_size").asText());
+                boolean sellFilled = (fillSell == this.position.getSizeBTC());
+                if (sellFilled) {
+                    this.position.setExitPoint(sell);
                     this.status = 6;
-                    this.position.setClosePoint(sell);
-                    if (!this.position.isRecursiveDrive()) break;
-                    if (this.position.getRecursions() == this.position.getRecursionLimit()) break;
-                    nextPosition = new Position(this.position);
+                } else {
+                    if (spotPrice > sell) {
+                        if (spotPrice < nextSell) break;
+                        //JsonNode deleteOrder = this.client.deleteOrder(this.position.getBuyOrderID().toString());
+                        //validate success
+                        //SEND STOP SELL TO COINBASE
+                        //if SUCCESSFUL this.position.setSellOrderID(orderUUID);
+                        this.position.setExitPoint(sell + (sell * this.position.getExitLimit()));
+                        this.statusGoals[this.status] = this.position.getExitLimit();
+                        break;
+                    } else {
+                        double size = this.position.getSizeBTC();
+                        this.position.setSize(size * sell);
+                        this.status = 6;
+                        this.position.setClosePoint(sell);
+                        if (!this.position.isRecursiveDrive()) break;
+                        if (this.position.getRecursions() == this.position.getRecursionLimit()) break;
+                        nextPosition = new Position(this.position);
+                    }
                 }
             case 6:
                 this.statusGoals[this.status] = this.position.getClosePoint();

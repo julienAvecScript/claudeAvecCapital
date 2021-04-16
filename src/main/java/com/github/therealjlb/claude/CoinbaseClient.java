@@ -93,7 +93,7 @@ public class CoinbaseClient {
         node.put("side", side);
         node.put("product_id", this.product);
         node.put("stop", stop);
-        node.put("stop_limit", price);
+        node.put("stop_price", price);
         return node;
     }
 
@@ -108,7 +108,6 @@ public class CoinbaseClient {
             headers.add("User-Agent", "Claude");
             headers.add("CB-ACCESS-KEY", this.key);
             String bodyString = objectMapper.writeValueAsString(bodyNode);
-            //String bodyString = "{\"size\":\"" + size + "\",\"price\":\"" + price + "\",\"side\":\"" + side + "\",\"product_id\":\"" + this.product + "\"}";
             String signature = sign(dir, bodyString, time, "POST");
             headers.add("CB-ACCESS-SIGN", signature);
             headers.add("CB-ACCESS-TIMESTAMP", time);
@@ -144,6 +143,29 @@ public class CoinbaseClient {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode order = objectMapper.readValue(stream, JsonNode.class);
             return order;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public JsonNode deleteOrder(String orderID) {
+        String time = getTime();
+        try {
+            String dir = "/orders/" + orderID;
+            URL url = new URL(this.endpoint + dir);
+            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+            connection.setRequestMethod("DELETE");
+            connection.setRequestProperty("CB-ACCESS-KEY", this.key);
+            String signature = sign(dir, "", time, "DELETE");
+            if (signature == null) return null;
+            connection.setRequestProperty("CB-ACCESS-SIGN", signature);
+            connection.setRequestProperty("CB-ACCESS-TIMESTAMP", time);
+            connection.setRequestProperty("CB-ACCESS-PASSPHRASE", this.passphrase);
+            connection.setRequestProperty("Content-Type", "application/json");
+            InputStream stream = connection.getInputStream();
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode result = objectMapper.readValue(stream, JsonNode.class);
+            return result;
         } catch (Exception e) {
             return null;
         }
