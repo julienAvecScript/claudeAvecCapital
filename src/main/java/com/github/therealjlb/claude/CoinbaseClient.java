@@ -1,10 +1,14 @@
 package com.github.therealjlb.claude;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import javafx.scene.control.Alert;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -13,7 +17,6 @@ import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.Base64;
-import java.util.HashMap;
 
 public class CoinbaseClient {
 
@@ -52,39 +55,73 @@ public class CoinbaseClient {
         }
     }
 
-    public JsonNode submitOrder(String side, String price, String size) {
-        String time = getTime();
-        price = "61000";
-        size = "0.0003";
+    private JsonNode[] getProducts() {
         try {
-            String dir = "/orders/";
+            String dir = "/products/";
             URL url = new URL(this.endpoint + dir);
-            HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("CB-ACCESS-KEY", this.key);
-            ObjectMapper objectMapper = new ObjectMapper();
-            /*ObjectNode body = objectMapper.createObjectNode();
-            body.put("size", size);
-            body.put("price", price);
-            body.put("side", side);
-            body.put("product_id", this.product);
-            String bodyString = objectMapper.writerWithDefaultPrettyPrinter().writeValueAS(body);
-            String cleanString = bodyString.substring(1, bodyString.length()-1);*/
-            String cleanString = "\"size\":\"" + size + "\",\"price\":\"" + price + "\",\"side\":\"" + side + "\",\"product_id\":\"" + this.product + "\"";
-            System.out.println(cleanString);
-            String signature = sign(dir, cleanString, time, "POST");
-            if (signature == null) return null;
-            connection.setRequestProperty("CB-ACCESS-SIGN", signature);
-            connection.setRequestProperty("CB-ACCESS-TIMESTAMP", time);
-            connection.setRequestProperty("CB-ACCESS-PASSPHRASE", this.passphrase);
-            connection.setRequestProperty("Content-Type", "application/json");
-            InputStream stream = connection.getInputStream();
-            String result = stream.toString();
-            System.out.println(result);
-            JsonNode order = objectMapper.readValue(stream, JsonNode.class);
+            HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
+            InputStream stream = con.getInputStream();
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode[] nodes = mapper.readValue(stream, JsonNode[].class);
+            return nodes;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public JsonNode postStopBuy(String price, String size) {
+        String side = "buy";
+        String stop = "entry";
+        JsonNode bodyNode = buildBody(size, price, side, stop);
+        JsonNode result = buildPOST(bodyNode);
+        return result;
+    }
+
+    public JsonNode postStopSell(String price, String size) {
+        String side = "sell";
+        String stop = "loss";
+        JsonNode bodyNode = buildBody(size, price, side, stop);
+        JsonNode result = buildPOST(bodyNode);
+        return result;
+    }
+
+    private JsonNode buildBody(String size, String price, String side, String stop) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode node = objectMapper.createObjectNode();
+        node.put("size", size);
+        node.put("price", price);
+        node.put("side", side);
+        node.put("product_id", this.product);
+        node.put("stop", stop);
+        node.put("stop_limit", price);
+        return node;
+    }
+
+    private JsonNode buildPOST(JsonNode bodyNode) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        String time = getTime();
+        String dir = "/orders/";
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("accept", "application/json");
+            headers.add("content-type", "application/json");
+            headers.add("User-Agent", "Claude");
+            headers.add("CB-ACCESS-KEY", this.key);
+            String bodyString = objectMapper.writeValueAsString(bodyNode);
+            //String bodyString = "{\"size\":\"" + size + "\",\"price\":\"" + price + "\",\"side\":\"" + side + "\",\"product_id\":\"" + this.product + "\"}";
+            String signature = sign(dir, bodyString, time, "POST");
+            headers.add("CB-ACCESS-SIGN", signature);
+            headers.add("CB-ACCESS-TIMESTAMP", time);
+            headers.add("CB-ACCESS-PASSPHRASE", this.passphrase);
+            HttpEntity<String> httpEnt = new HttpEntity<>(bodyString, headers);
+            RestTemplate template = new RestTemplate();
+            ParameterizedTypeReference<String> typeRef = new ParameterizedTypeReference<String>() {};
+            ResponseEntity<String> response = template.exchange(this.endpoint + dir, HttpMethod.POST, httpEnt, typeRef);
+            System.out.println(response.getBody());
+            JsonNode order = objectMapper.readValue(response.getBody(), JsonNode.class);
             return order;
         } catch (Exception e) {
-            System.out.println("????????? " + e.getMessage() + " !!!!!!!!!!!");
+            e.printStackTrace();
             return null;
         }
     }
@@ -122,20 +159,6 @@ public class CoinbaseClient {
             JsonNode node = mapper.readValue(stream, JsonNode.class);
             String time = node.get("epoch").asText();
             return time;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private JsonNode[] getProducts() {
-        try {
-            String dir = "/products/";
-            URL url = new URL(this.endpoint + dir);
-            HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
-            InputStream stream = con.getInputStream();
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode[] nodes = mapper.readValue(stream, JsonNode[].class);
-            return nodes;
         } catch (Exception e) {
             return null;
         }

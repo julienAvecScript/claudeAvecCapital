@@ -503,7 +503,7 @@ public class Dashboard extends Application {
     }
 
     private void testOrder() {
-        JsonNode result = this.client.submitOrder("buy", this.test1.getText(), this.test2.getText());
+        JsonNode result = this.client.postStopBuy(this.test1.getText(), this.test2.getText());
         this.test3.setText(result.get("id").asText());
     }
 
