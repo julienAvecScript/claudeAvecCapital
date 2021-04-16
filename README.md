@@ -12,9 +12,3 @@ Buys low, sells high and holds your shit together
 }
 4. Restart Claude
 5. Load Profile > Use Profile Key to go in LIVE mode
-
-# BOUNTY
-I will pay 20 USD in Bitcoin Cash to the first contributor that makes the Order POST signatures work.
-
-# REFACTORING
-Will happen after the POST signatures work. coinbase-java library references need to be cleaned up and should be ignored (CoinbaseClient class = cURL).
