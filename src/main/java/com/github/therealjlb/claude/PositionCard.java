@@ -156,7 +156,7 @@ public class PositionCard {
                 sell = this.position.getExitPoint();
                 this.statusGoals[this.status] = sell;
                 nextSell = sell+(sell*this.position.getPeakLimit());
-                JsonNode fillSellOrder = this.client.getOrder(this.position.getBuyOrderID().toString());
+                JsonNode fillSellOrder = this.client.getOrder(this.position.getSellOrderID().toString());
                 double fillSell = Double.parseDouble(fillSellOrder.get("filled_size").asText());
                 boolean sellFilled = (fillSell == this.position.getSizeBTC());
                 if (sellFilled) {
