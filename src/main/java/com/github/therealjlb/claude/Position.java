@@ -365,25 +365,18 @@ public class Position {
 
     public double check(double spotPrice, double open, CoinbaseClient client) {
         int status = this.status;
-        System.out.println("EY B0SS? " + status + ". ");
         switch (status) {
             case 0:
-                System.out.println("STEP 0. ");
                 return checkEntry(spotPrice);
             case 1:
-                System.out.println("STEP 1. ");
                 return checkDip(spotPrice);
             case 2:
-                System.out.println("STEP 2. ");
                 return checkMomentum(spotPrice, open);
             case 3:
-                System.out.println("STEP 3. ");
                 return checkBuy(client);
             case 4:
-                System.out.println("STEP 4. ");
                 return checkPeak(spotPrice, client);
             case 5:
-                System.out.println("STEP 5. ");
                 return checkSell(spotPrice, open, client);
             default:
                 return checkException();
@@ -422,13 +415,10 @@ public class Position {
             return buy;
         }
         if (spotPrice < open) return this.momReversalLimit;
-        System.out.println("OPEN OK. ");
         if (spotPrice < buy) return buy;
-        System.out.println("LIMIT OK. ");
         status = 3;
         this.buyPrice = spotPrice;
         this.status = status;
-        System.out.println("MOM STAT: " + status);
         return buy;
     }
 
@@ -444,14 +434,11 @@ public class Position {
         double buy = this.buyPrice;
         double qty = this.size/buy;
         if (this.sims) {
-            System.out.println("SIMS. ");
             buyFilled = true;
         } else {
             if (this.buyOrderID == null) {
                 String buyStr = usdcFormat.format(buy);
-                System.out.println("FORMAT BUY. " + buyStr + ". ");
                 String qtyStr = btcFormat.format(BigDecimal.valueOf(qty));
-                System.out.println("FORMAT QTY. " + qtyStr + ". ");
                 JsonNode buyOrder = client.postStopBuy(buyStr, qtyStr);
                 if (buyOrder == null) return 0;
                 String buyOrderID = buyOrder.get("id").asText();
@@ -467,13 +454,11 @@ public class Position {
                     buyFilled = (fillReason.equals("filled"));
                     if (buyFilled) this.sizeBTC = Double.parseDouble(fillBuyOrder.get("filled_size").asText());
                 } else {
-                    System.out.println(fillStatus);
                     buyFilled = false;
                 }
             }
         }
         if (buyFilled) {
-            System.out.println("FILLED. ");
             this.turn = 2;
             status = 4;
             this.status = status;
@@ -493,6 +478,7 @@ public class Position {
             JsonNode sellOrder = client.postStopSell(sellStr, qtyStr);
             if (sellOrder == null) return 0;
             String sellOrderID = sellOrder.get("id").asText();
+            System.out.println("BUY ID: " + sellOrderID);
             this.sellOrderID = UUID.fromString(sellOrderID);
         }
         this.exitPoint = sell;

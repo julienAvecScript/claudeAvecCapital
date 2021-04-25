@@ -33,7 +33,6 @@ public class PositionCard {
         selector.setOnAction(e -> viewOnDashboard());
         this.card.getChildren().add(selector);
         if (this.position.getStatus() == 8) return;
-        System.out.println(this.position.getStatus());
         this.playButton = new Button("RUN");
         this.playButton.setTranslateX(Dashboard.POSITION_WIDTH-(Dashboard.CELL_WIDTH*10));
         this.playButton.setTranslateY((Dashboard.POSITION_HEIGHT/2)-(Dashboard.CELL_HEIGHT/2));
@@ -76,10 +75,8 @@ public class PositionCard {
 
     public Position checkPosition(double spotPrice, double open) {
         this.presentation = "I AM " + this.position.getName() + " " + this.turns[this.position.getTurn()];
-        System.out.println(this.presentation);
         if (this.position.getStatus() > 5) return null;
         double goal = this.position.check(spotPrice, open, this.client);
-        System.out.println("(OPEN " + open + "): STATUS " + this.position.getStatus() + ", GOAL " + goal);
         updateStory(goal, open);
         if (this.status != 6) return null;
         this.playButton.setVisible(false);
@@ -114,7 +111,6 @@ public class PositionCard {
         startPresentation();
         DecimalFormat format = new DecimalFormat("###.##");
         this.story = this.presentation +"\n" + this.statuses[this.status];
-        System.out.print(this.statusGoals[this.status]);
         if (this.statusGoals[this.status] > 0) {
             if (this.status == 2 && goal < 1) {
                 double goalDisplay = open+(open*this.position.getMomReversalLimit());
@@ -147,6 +143,10 @@ public class PositionCard {
 
     public Pane getCard() {
         return this.card;
+    }
+
+    public HashMap<String, String> getMap() {
+        return this.position.getMap();
     }
 
     private Dashboard dash;

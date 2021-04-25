@@ -566,6 +566,7 @@ public class Dashboard extends Application {
         this.selectedPosition.setExitLimit(Double.parseDouble(this.exitLimitField.getText()));
         this.selectedPosition.setRecursiveDrive(this.recursiveDriveCheckBox.isSelected());
         this.selectedPosition.setRecursionLimit(Integer.parseInt(this.recursiveDriveLimitField.getText()));
+        writePositions();
         viewDashboard();
     }
 
@@ -588,7 +589,7 @@ public class Dashboard extends Application {
             this.ticker = new Ticker(session);
         }
         Thread tickThread = new Thread(this.ticker);
-        tickThread.run();
+        tickThread.start();
     }
 
     public void updateDashboard(JsonNode node) {
@@ -621,12 +622,15 @@ public class Dashboard extends Application {
 
     private void updatePositions() {
         if (this.candles15m.size() < 1) return;
-        double open;
-        open = this.candleLive.getOpen();
+        double open = this.candleLive.getOpen();
+        boolean change = false;
         for (PositionCard posCard : this.positionCards) {
-            System.out.println("CHECK " + posCard.getName() + ". ");
+            HashMap<String, String> posMap = posCard.getMap();
             posCard.checkPosition(this.spotPrice, open);
+            if (change) continue;
+            change = (!posMap.equals(posCard.getMap()));
         }
+        if (change) writePositions();
     }
 
     private void drawCandles() {
@@ -752,18 +756,10 @@ public class Dashboard extends Application {
 
     private void writePositions() {
         System.out.print("WRITE. ");
-        ObjectMapper mapper = new ObjectMapper();
         if (this.positions == null) return;
-        try {
-            HashMap<String, HashMap<String, String>> posMap = new HashMap<String, HashMap<String, String>>();
-            for (Position pos : positions) {
-                posMap.put(pos.getId().toString(), pos.getMap());
-            }
-            //System.out.println(posList.toString());
-            mapper.writeValue(new FileOutputStream(this.positionFile.getAbsolutePath()), posMap);
-        } catch (Exception e) {
-            return;
-        }
+        SaveProducer saver = new SaveProducer(this.positions, this.positionFile);
+        Thread saveThread = new Thread(saver);
+        saveThread.start();
     }
 
     public CoinbaseClient getClient() {
