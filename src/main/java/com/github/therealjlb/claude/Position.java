@@ -1,9 +1,13 @@
 package com.github.therealjlb.claude;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import javafx.scene.canvas.Canvas;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Date;
 import java.sql.Timestamp;
+import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,7 +15,9 @@ import java.util.UUID;
 
 public class Position {
 
+
     public Position(HashMap<String, String> map) {
+        roundFormats();
         this.sims = Boolean.parseBoolean(map.get("sims"));
         this.id = UUID.fromString(map.get("id"));
         this.startTS = Timestamp.valueOf(map.get("startTS"));
@@ -37,6 +43,7 @@ public class Position {
     }
 
     public Position(boolean sims) {
+        roundFormats();
         this.sims = sims;
         this.id = UUID.randomUUID();
         this.startTS = new Timestamp(System.currentTimeMillis());
@@ -62,6 +69,7 @@ public class Position {
     }
 
     public Position(Position position) {
+        roundFormats();
         this.sims = position.isSims();
         this.startTS = new Timestamp(System.currentTimeMillis());
         this.status = 0;
@@ -78,6 +86,7 @@ public class Position {
         this.exitLimit = position.getExitLimit();
         this.recursiveDrive = position.isRecursiveDrive();
         this.recursionLimit = position.getRecursionLimit();
+        this.recursions = position.getRecursions()+1;
         if (position.parentID == null) {
             this.parentID = position.getId();
         } else {
@@ -86,6 +95,11 @@ public class Position {
             position.setLittleSibling(this.id);
         }
         this.choke = false;
+    }
+
+    private void roundFormats() {
+        this.btcFormat.setRoundingMode(RoundingMode.CEILING);
+        this.usdcFormat.setRoundingMode(RoundingMode.CEILING);
     }
 
     public boolean isSims() {
@@ -293,8 +307,10 @@ public class Position {
         if (choke) {
             this.status = 7;
         } else {
-            this.status = this.turnStatuses[this.turn];
+            if (this.sellOrderID != null) this.status = this.SELL_STATUS;
+            else this.status = this.turnStatuses[this.turn];
         }
+        this.choke = choke;
     }
 
     public int getTurn() {
@@ -347,6 +363,197 @@ public class Position {
         return map;
     }
 
+    public double check(double spotPrice, double open, CoinbaseClient client) {
+        int status = this.status;
+        System.out.println("EY B0SS? " + status + ". ");
+        switch (status) {
+            case 0:
+                System.out.println("STEP 0. ");
+                return checkEntry(spotPrice);
+            case 1:
+                System.out.println("STEP 1. ");
+                return checkDip(spotPrice);
+            case 2:
+                System.out.println("STEP 2. ");
+                return checkMomentum(spotPrice, open);
+            case 3:
+                System.out.println("STEP 3. ");
+                return checkBuy(client);
+            case 4:
+                System.out.println("STEP 4. ");
+                return checkPeak(spotPrice, client);
+            case 5:
+                System.out.println("STEP 5. ");
+                return checkSell(spotPrice, open, client);
+            default:
+                return checkException();
+        }
+    }
+
+    private double checkEntry(double spotPrice) {
+        int status;
+        double enter = this.entryPoiht;
+        if (spotPrice > enter) {
+            if (this.explorationDrive) this.entryPoiht = spotPrice;
+            return enter;
+        }
+        status = 1;
+        this.status = status;
+        return enter;
+    }
+
+    private double checkDip(double spotPrice) {
+        int status;
+        double enter = this.entryPoiht;
+        double dip = enter-(enter*this.dipLimit);
+        if (spotPrice > dip) return dip;
+        status = 2;
+        this.dip = dip;
+        this.turn = 1;
+        this.status = status;
+        return dip;
+    }
+
+    private double checkMomentum(double spotPrice, double open) {
+        int status;
+        double buy = adjustMomentum(spotPrice);
+        if (spotPrice < this.dip) {
+            this.dip = spotPrice;
+            return buy;
+        }
+        if (spotPrice < open) return this.momReversalLimit;
+        System.out.println("OPEN OK. ");
+        if (spotPrice < buy) return buy;
+        System.out.println("LIMIT OK. ");
+        status = 3;
+        this.buyPrice = spotPrice;
+        this.status = status;
+        System.out.println("MOM STAT: " + status);
+        return buy;
+    }
+
+    private double adjustMomentum(double spotPrice) {
+        double momAdjust = spotPrice > this.dip ? 0 : (this.dip-spotPrice)/this.dip;
+        double momentum = this.dip*(this.momReversalLimit+momAdjust);
+        return this.dip+momentum;
+    }
+
+    private double checkBuy(CoinbaseClient client) {
+        int status;
+        boolean buyFilled;
+        double buy = this.buyPrice;
+        double qty = this.size/buy;
+        if (this.sims) {
+            System.out.println("SIMS. ");
+            buyFilled = true;
+        } else {
+            if (this.buyOrderID == null) {
+                String buyStr = usdcFormat.format(buy);
+                System.out.println("FORMAT BUY. " + buyStr + ". ");
+                String qtyStr = btcFormat.format(BigDecimal.valueOf(qty));
+                System.out.println("FORMAT QTY. " + qtyStr + ". ");
+                JsonNode buyOrder = client.postStopBuy(buyStr, qtyStr);
+                if (buyOrder == null) return 0;
+                String buyOrderID = buyOrder.get("id").asText();
+                System.out.println("BUY ID: " + buyOrderID);
+                this.buyOrderID = UUID.fromString(buyOrderID);
+                return buy;
+            } else {
+                JsonNode fillBuyOrder = client.getOrder(this.buyOrderID.toString());
+                String fillStatus = fillBuyOrder.get("status").asText();
+                if (fillStatus.equals("done")) {
+                    String fillReason = fillBuyOrder.get("done_reason").asText();
+                    System.out.println("CHECK BUY FILL: " + fillReason);
+                    buyFilled = (fillReason.equals("filled"));
+                    if (buyFilled) this.sizeBTC = Double.parseDouble(fillBuyOrder.get("filled_size").asText());
+                } else {
+                    System.out.println(fillStatus);
+                    buyFilled = false;
+                }
+            }
+        }
+        if (buyFilled) {
+            System.out.println("FILLED. ");
+            this.turn = 2;
+            status = 4;
+            this.status = status;
+        }
+        return this.buyPrice;
+    }
+
+    private double checkPeak(double spotPrice, CoinbaseClient client) {
+        int status;
+        double buy = this.buyPrice;
+        double peak = Math.max(spotPrice, buy+(buy*this.peakLimit));
+        double sell = peak-(peak*this.exitLimit);
+        if (spotPrice < peak) return peak;
+        if (!this.sims) {
+            String sellStr = this.usdcFormat.format(sell);
+            String qtyStr = this.btcFormat.format(BigDecimal.valueOf(this.sizeBTC));
+            JsonNode sellOrder = client.postStopSell(sellStr, qtyStr);
+            if (sellOrder == null) return 0;
+            String sellOrderID = sellOrder.get("id").asText();
+            this.sellOrderID = UUID.fromString(sellOrderID);
+        }
+        this.exitPoint = sell;
+        this.turn = 3;
+        status = 5;
+        this.status = status;
+        return sell;
+    }
+
+    private double checkSell(double spotPrice, double open, CoinbaseClient client) {
+        int status;
+        double sell = this.exitPoint;
+        double nextSell = sell+(sell*(this.exitLimit*2));
+        boolean sellFilled;
+        if (spotPrice < sell && this.sellOrderID == null) {
+            this.status = 4;
+            return spotPrice;
+        }
+        if (this.sims) {
+            if (spotPrice > nextSell) {
+                this.exitPoint = nextSell;
+                return nextSell;
+            } else sellFilled = true;
+        } else {
+            JsonNode fillSellOrder = client.getOrder(this.sellOrderID.toString());
+            String fillStatus = fillSellOrder.get("status").asText();
+            if (fillStatus.equals("done")) {
+                String fillReason = fillSellOrder.get("done_reason").asText();
+                System.out.println("CHECK SELL FILL: " + fillReason);
+                sellFilled = (fillReason.equals("filled"));
+                if (sellFilled) this.sizeBTC = Double.parseDouble(fillSellOrder.get("filled_size").asText());
+            } else {
+                System.out.println(fillStatus);
+                sellFilled = false;
+            }
+        }
+        if (sellFilled) {
+            this.endTS = new Timestamp(System.currentTimeMillis());
+            this.status = 6;
+            return sell;
+        } else {
+            if (spotPrice < nextSell) return sell;
+            if (spotPrice > open) return sell;
+            double nextExit = spotPrice-(spotPrice*this.exitLimit);
+            String sellStr = this.usdcFormat.format(nextExit);
+            String qtyStr = this.btcFormat.format(BigDecimal.valueOf(this.sizeBTC));
+            this.exitPoint = nextExit;
+            JsonNode cancelOrder = client.deleteOrder(this.sellOrderID.toString());
+            if (cancelOrder == null) return 0;
+            JsonNode sellOrder = client.postStopSell(sellStr, qtyStr);
+            if (sellOrder == null) return 0;
+            String sellOrderID = sellOrder.get("id").asText();
+            this.sellOrderID = UUID.fromString(sellOrderID);
+            return nextExit;
+        }
+    }
+
+    private int checkException() {
+        return -420;
+    }
+
     private boolean sims;
     private UUID id;
     private UUID buyOrderID;
@@ -356,6 +563,8 @@ public class Position {
     private UUID littleSiblingID;
     private Timestamp startTS;
     private Timestamp endTS;
+    private DecimalFormat btcFormat = new DecimalFormat("##.########");
+    private DecimalFormat usdcFormat = new DecimalFormat("###.##");
     private int status;
     private String name;
     private double size;
@@ -378,8 +587,12 @@ public class Position {
     private int turn;
     private int[] turnStatuses = {
             9,
-            0,
+            1,
             3,
-            5
+            4
     };
+    private double dip;
+    private boolean checkSave = false;
+    private final int BUY_STATUS = 3;
+    private final int SELL_STATUS = 5;
 }

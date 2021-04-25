@@ -13,6 +13,9 @@ module com.github.therealjlb.claude {
 
     // Tells the Java compiler that you module needs this module from the JDK
     requires java.net.http;
+    requires spring.context;
+    requires spring.websocket;
+    requires spring.messaging;
 
     opens com.github.therealjlb.claude to javafx.graphics;
 }

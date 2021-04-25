@@ -21,6 +21,11 @@ dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.12.2'
     implementation 'org.springframework:spring-core:5.3.6'
     implementation 'org.springframework:spring-web:5.3.6'
+    implementation 'org.springframework:spring-websocket:5.3.6'
+    implementation 'org.springframework:spring-messaging:5.3.6'
+    implementation 'org.glassfish.tyrus:tyrus-client:1.13.1'
+    implementation 'org.glassfish.tyrus:tyrus-container-grizzly-client:1.13.1'
+    implementation group: 'org.springframework.boot', name: 'spring-boot-starter-websocket', version: '2.4.5'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.0'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
 }

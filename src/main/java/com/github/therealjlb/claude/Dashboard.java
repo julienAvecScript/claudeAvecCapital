@@ -473,27 +473,6 @@ public class Dashboard extends Application {
         cancelButton.setOnAction(e -> viewDashboard());
         this.positionEditor.getChildren().add(cancelButton);
 
-        this.test1 = FXFactory.newTextField("PRICE", this.dashboardPane);
-        this.test1.setPrefSize(CELL_WIDTH*6, CELL_HEIGHT*3);
-        this.test1.setTranslateX(SCROLLER_WIDTH/2);
-        this.test1.setTranslateY(SCROLLER_HEIGHT-80);
-
-        this.test2 = FXFactory.newTextField("SIZE", this.dashboardPane);
-        this.test2.setPrefSize(CELL_WIDTH*6, CELL_HEIGHT*3);
-        this.test2.setTranslateX(SCROLLER_WIDTH/2);
-        this.test2.setTranslateY(SCROLLER_HEIGHT-50);
-
-        this.test3 = FXFactory.newDisplay(this.dashboardPane);
-        this.test3.setTranslateX(SCROLLER_WIDTH/2);
-        this.test3.setTranslateY(SCROLLER_HEIGHT-20);
-
-        Button testOrderButton = new Button("BUY BTC");
-        testOrderButton.setTranslateX(SCROLLER_WIDTH-60);
-        testOrderButton.setTranslateY(SCROLLER_HEIGHT-50);
-        testOrderButton.setPrefSize(CELL_WIDTH*6, CELL_HEIGHT*3);
-        testOrderButton.setOnAction(e -> testOrder());
-        this.dashboardPane.getChildren().add(testOrderButton);
-
         this.dashboardPane.getChildren().add(this.positionEditor);
         Scene dashboardScene = new Scene(this.dashboardPane, PREFERRED_WIDTH, PREFERRED_HEIGHT);
         this.stage.setScene(dashboardScene);
@@ -599,27 +578,31 @@ public class Dashboard extends Application {
     }
     
     private void initTicker() {
-        this.ticker = new Ticker(this, "BTC-USDC");
-        this.ticker.tick();
+        //WEBSOCKET IS IN DEVELOPMENT
+        //FOR NOW USE POLLER (NOT RECOMMENDED)
+        if (true) {
+            TickPoller poller = new TickPoller(this, "BTC-USDC");
+            this.ticker = new Ticker(poller);
+        } else {
+            TickSession session = new TickSession(this, "BTC-USDC");
+            this.ticker = new Ticker(session);
+        }
+        Thread tickThread = new Thread(this.ticker);
+        tickThread.run();
     }
 
-    public void updateDashboard(HashMap<String, String> map) {
-        String spotPriceJSON = map.get("price");
-        this.spotPriceDisplay.setText(spotPriceJSON);
-        System.out.println();
-        System.out.print("TICK: " + spotPriceJSON + ". ");
-        this.spotPrice = Double.parseDouble(spotPriceJSON);
+    public void updateDashboard(JsonNode node) {
+        this.spotPrice = Double.parseDouble(node.get("price").asText());
+        this.spotPriceDisplay.setText(String.valueOf(this.spotPrice));
         updateHiLoWithSpotPrice(false);
         double spotPrice24h = updateCandles();
         updatePositions();
         if (spotPrice24h == 0) return;
-        //System.out.print("SPOT PRICE. ");
         double delta = this.spotPrice-spotPrice24h;
         DecimalFormat format = new DecimalFormat("###.##");
         this.dayPriceDelta = (delta/spotPrice24h)*100;
         this.dayPriceDeltaDisplay.setText(format.format(this.dayPriceDelta) + "%");
         if (this.candleLive == null) return;
-        //System.out.print("MOMENTUM. ");
         double momPer = ((this.spotPrice-this.candleLive.getOpen())/this.candleLive.getOpen())*100;
         this.momentumDisplay.setText(format.format(momPer) + "%");
     }
@@ -638,17 +621,11 @@ public class Dashboard extends Application {
 
     private void updatePositions() {
         if (this.candles15m.size() < 1) return;
-        double open, prevOpen;
-        if (this.candles15m.size() > 1) {
-            open = this.candleLive.getOpen();
-            prevOpen = this.candles15m.get(this.candles15m.size()-2).getOpen();
-        } else {
-            open = 0;
-            prevOpen = 0;
-        }
-
+        double open;
+        open = this.candleLive.getOpen();
         for (PositionCard posCard : this.positionCards) {
-            posCard.checkPosition(this.spotPrice, open, prevOpen, null);
+            System.out.println("CHECK " + posCard.getName() + ". ");
+            posCard.checkPosition(this.spotPrice, open);
         }
     }
 
@@ -766,7 +743,7 @@ public class Dashboard extends Application {
 
     @Override
     public void stop() {
-        if (ticker != null) this.ticker.die();
+        if (this.ticker != null) this.ticker.stop();
         for (PositionCard posCard : this.positionCards) {
             posCard.chokePosition();
         }

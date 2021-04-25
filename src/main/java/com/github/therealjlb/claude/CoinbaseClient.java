@@ -69,6 +69,20 @@ public class CoinbaseClient {
         }
     }
 
+    public JsonNode getProductTicker(String productID) {
+        try {
+            String dir = "/products/" + productID + "/ticker";
+            URL url = new URL(this.endpoint + dir);
+            HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
+            InputStream stream = con.getInputStream();
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode node = mapper.readValue(stream, JsonNode.class);
+            return node;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public JsonNode postStopBuy(String price, String size) {
         String side = "buy";
         String stop = "entry";

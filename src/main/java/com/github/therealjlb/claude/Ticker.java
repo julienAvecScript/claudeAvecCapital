@@ -1,51 +1,38 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.github.therealjlb.claude;
 
-import java.sql.Timestamp;
-import java.util.HashMap;
-import java.net.*;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-/**
- *
- * @author Jonathan
- */
-public class Ticker {
-           
-    public Ticker(Dashboard dashboard, String productID) {
-        this.dashboard = dashboard;
-        this.productID = productID;
-        try {
-            this.url = new URL("https://api.pro.coinbase.com/products/" + this.productID + "/ticker");
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-            return;
-        }
-        System.out.println("TICKER TASK GO.");
-    }
+public class Ticker implements Runnable {
 
-    public void tick() {
+    public Ticker(TickPoller poller) {
+        this.poller = poller;
         this.executor = Executors.newSingleThreadScheduledExecutor();
-        BlockingQueue<HashMap<String, String>> queue = new ArrayBlockingQueue<HashMap<String, String>>(1024);
-        TickProducer tickProducer = new TickProducer(this.url, this.dashboard);
-        executor.scheduleAtFixedRate(tickProducer, 1, 1, TimeUnit.SECONDS);
     }
 
-    public long getStartMils() {
-        return startTS.getTime();
+    public Ticker(TickSession session) {
+        this.session = session;
     }
 
-    public void die() {
-        this.executor.shutdown();
+    @Override
+    public void run() {
+        System.out.println("PRODUCER RUN. ");
+        if (this.poller == null) {
+            System.out.println("SESSION START. ");
+            this.session.start();
+        } else {
+            System.out.println("POLLER START. ");
+            this.executor.scheduleAtFixedRate(this.poller, 1, 1, TimeUnit.SECONDS);
+        }
     }
 
-    private Timestamp startTS = new Timestamp(System.currentTimeMillis());
+    public void stop() {
+        if (this.session != null) this.session.stop();
+        if (this.executor != null) this.executor.shutdown();
+    }
+
+    private TickSession session;
+    private TickPoller poller;
     private ScheduledExecutorService executor;
-    private URL url;
-    private String productID;
-    private Dashboard dashboard;
 }
