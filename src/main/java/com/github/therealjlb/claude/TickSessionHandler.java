@@ -11,9 +11,9 @@ import org.springframework.messaging.simp.stomp.StompSessionHandler;
 
 import java.lang.reflect.Type;
 
-public class CoinbaseSessionHandler implements StompSessionHandler {
+public class TickSessionHandler implements StompSessionHandler {
 
-    public CoinbaseSessionHandler(Dashboard dash, String productID) {
+    public TickSessionHandler(Dashboard dash, String productID) {
         System.out.println("HANDER CREATED. ");
         this.dash = dash;
         this.productID = productID;
